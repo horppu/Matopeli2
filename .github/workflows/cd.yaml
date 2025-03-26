@@ -37,7 +37,6 @@ jobs:
         id: version
         shell: bash
         run: |
-          get fetch --tags
           TAG=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
           echo "Nykyinen tagi: $TAG"
 
