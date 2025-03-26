@@ -1,0 +1,67 @@
+name: CD Rakenna ja julkaise .exe automaattisella versionumerolla
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write  # Tarvitaan tagin ja julkaisun luontiin
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pygame pyinstaller pytest
+
+      - name: Run tests
+        run: pytest
+
+      - name: Build .exe with PyInstaller
+        run: |
+          pyinstaller --onefile matopeli.py
+
+      - name: Hae edellinen tagi ja laske seuraava
+        id: version
+        shell: bash
+        run: |
+          TAG=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
+          echo "Nykyinen tagi: $TAG"
+
+          if [[ -z "$TAG" ]]; then
+            TAG="v1.0.0"
+          fi
+
+          BASE=$(echo "$TAG" | cut -d. -f1-2)
+          PATCH=$(echo "$TAG" | cut -d. -f3)
+          PATCH=$((PATCH + 1))
+          NEXT_TAG="$BASE.$PATCH"
+
+          echo "Seuraava tagi: $NEXT_TAG"
+          echo "NEXT_TAG=$NEXT_TAG" >> $GITHUB_ENV
+
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git tag -a "$NEXT_TAG" -m "Automaattinen julkaisu $NEXT_TAG"
+          git push origin "$NEXT_TAG"
+
+      - name: Julkaise .exe GitHub Releasesiin
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Julkaisu ${{ env.NEXT_TAG }}
+          tag_name: ${{ env.NEXT_TAG }}
+          files: dist/matopeli.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
